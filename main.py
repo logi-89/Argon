@@ -7,7 +7,7 @@ HEIGHT = 775
 FOV = math.pi / 3
 HALF_FOV = FOV / 2
 NUM_RAYS = 220
-MAX_DEPTH = 750
+MAX_DEPTH = 650
 DELTA_ANGLE = FOV / NUM_RAYS
 SCALE = WIDTH / NUM_RAYS
 
@@ -15,8 +15,8 @@ SCALE = WIDTH / NUM_RAYS
 MENU = "menu"
 GAME = "game"
 CREDITS = "credits"
-game_state = MENU
-#game_state = GAME
+#game_state = MENU
+game_state = GAME
 
 # INIT 
 pygame.init()
@@ -30,20 +30,22 @@ SQH = 1000
 # Main Map
 MAP =[
     "###########",
-    "#......#..#",
-    "#.#$#....$#",
+    "#...@..#..#",
+    "#@#$#....$#",
     "#.###....##",
     "#..#.......",
     "##....##$.#",
-    "##.######$#",
-    "##.$#######",
+    "##@####.###",
+    "##.$##.@@@$",
     "#$.####$..#",
     "##...####.#",
     "#....$##$.#",
     "###.#####.#",
     "##$..##...#",
-    "###......##",
-    "####..#..##"
+    "#.#......##",
+    "#@@#..#..##",
+    "#@@@@@@####",
+    "####..@####"
 ]
 
 area1 = [
@@ -62,11 +64,23 @@ MAP_HEIGHT = len(MAP) * TILE
 
 chests = []
 swords = []
+fire = []
+lightning = []
 
+# Locate chests in the map
 for row_idx, row in enumerate(MAP):
     for col_idx, cell in enumerate(row):
         if cell == "$":
             chests.append((
+                col_idx * TILE + TILE // 2,
+                row_idx * TILE + TILE // 2
+            ))
+
+# Locate fire walls in the map
+for row_idx, row in enumerate(MAP):
+    for col_idx, cell in enumerate(row):
+        if cell == "@":
+            fire.append((
                 col_idx * TILE + TILE // 2,
                 row_idx * TILE + TILE // 2
             ))
@@ -99,12 +113,32 @@ def draw_centered_text(text, font, color, y):
     rect = surface.get_rect(center=(WIDTH // 2, y))
     screen.blit(surface, rect)
 
+def draw_left_text(text, font, color, x, y):
+    surface = font.render(text, True, color)
+    rect = surface.get_rect(topleft=(x, y))
+    screen.blit(surface, rect)
+
 def is_wall(x, y):
     if x < 0 or y < 0:
         return True
     if x >= MAP_WIDTH or y >= MAP_HEIGHT:
         return True
     return MAP[int(y // TILE)][int(x // TILE)] == "#"
+
+def is_fire_wall(x, y):
+    if x < 0 or y < 0:
+        return False
+    if x >= MAP_WIDTH or y >= MAP_HEIGHT:
+        return False
+    return MAP[int(y // TILE)][int(x // TILE)] == "@"
+
+def draw_sword_in_hand():
+    if has_sword:
+        hand_sword = pygame.transform.scale(sword_image, (300, 300))
+        screen.blit(
+            hand_sword,
+            (WIDTH - 300, HEIGHT - 300)
+        )
 
 # GAME LOOP 
 running = True
@@ -136,6 +170,16 @@ while running:
             coins = coins + 1
             print("Coins:")
             print(coins)
+
+    for lx, ly in lightning:
+        if math.hypot(px - lx, py - ly) < 40:
+            print("You were struck by lightning! Game Over.")
+            running = False
+
+    for fx, fy in fire:
+        if math.hypot(px - fx, py - fy) < 40:
+            print("You walked into fire!")
+
 
     # MENU 
     if game_state == MENU:
@@ -186,12 +230,7 @@ while running:
     screen.fill((30, 30, 30))
     pygame.draw.rect(screen, (70, 70, 70), (0, HEIGHT // 2, WIDTH, HEIGHT // 2))
 
-    if has_sword:
-        hand_sword = pygame.transform.scale(sword_image, (300, 300))
-        screen.blit(
-            hand_sword,
-            (WIDTH - 300, HEIGHT - 300)
-        )
+    draw_sword_in_hand()
 
     ray_angle = angle - HALF_FOV
 
@@ -199,6 +238,19 @@ while running:
         for depth in range(1, MAX_DEPTH):
             x = px + depth * math.cos(ray_angle)
             y = py + depth * math.sin(ray_angle)
+
+            if is_fire_wall(x, y):
+                depth *= math.cos(angle - ray_angle)
+                wall_height = (50000 / (depth + 0.0001))
+                zbuffer[ray] = depth # store wall depth
+
+                #Fire wall coloring
+                for i in range(5250):
+                    reds = 110 + i // 50
+
+                color = 255 / (1 + depth * depth * 0.00002)
+                pygame.draw.rect(screen,(255, 100, 0),(int(ray * SCALE), HEIGHT // 2 - wall_height // 2, int(SCALE + 1), wall_height))
+                break
 
             if is_wall(x, y):
                 depth *= math.cos(angle - ray_angle)
@@ -283,6 +335,7 @@ while running:
                 )
 
         #draw_centered_text("Press C for Credits", small_font, (200, 200, 200), HEIGHT - 20)
+        draw_left_text(f"Coins: {coins}", small_font, (200, 200, 200), 20, 20)
 
     pygame.display.flip()
     clock.tick(60)
